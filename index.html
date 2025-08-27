@@ -122,6 +122,8 @@
 
         // --- منطق اصلی برنامه ---
         let tasks = loadTasks();
+        let editingTaskCopy = null; // کپی موقت از وظیفه در حال ویرایش
+        
         const taskList = document.getElementById('taskList');
         const newTaskInput = document.getElementById('newTaskInput');
         const addTaskBtn = document.getElementById('addTaskBtn');
@@ -173,7 +175,7 @@
             titleInput.className = 'custom-input text-lg p-2 border rounded-lg';
             editForm.appendChild(titleInput);
             const attachmentsEditContainer = document.createElement('div');
-            attachmentsEditContainer.className = 'mt-1 flex flex-wrap gap-2 attachments-edit';
+            attachmentsEditContainer.className = 'mt-1 flex flex-wrap gap-3 attachments-edit';
             attachmentsEditContainer.innerHTML = `<p class="text-sm sub-header w-full mb-1">ضمیمه‌ها</p>`;
             renderAttachments(attachmentsEditContainer, task, true);
             editForm.appendChild(attachmentsEditContainer);
@@ -189,15 +191,17 @@
             const subtaskList = document.createElement('ul');
             subtaskList.className = 'mt-4 pr-6 space-y-3';
             if (task.children && task.children.length > 0) {
-                task.children.forEach(childTask => li.appendChild(createTaskElement(childTask)));
+                task.children.forEach(childTask => subtaskList.appendChild(createTaskElement(childTask)));
             }
             li.appendChild(subtaskList);
             return li;
         }
 
-        function renderAttachments(container, task, isEditMode) {
+        function renderAttachments(container, taskData, isEditMode) {
             container.querySelectorAll('.attachment-item').forEach(el => el.remove());
-            task.attachments.forEach((file, index) => {
+            const currentTask = isEditMode && editingTaskCopy && editingTaskCopy.id === taskData.id ? editingTaskCopy : taskData;
+            
+            currentTask.attachments.forEach((file, index) => {
                 const fileContainer = document.createElement('div');
                 fileContainer.className = 'relative attachment-item flex flex-col items-center gap-1';
                 
@@ -211,13 +215,13 @@
                     const controls = document.createElement('div');
                     controls.className = 'flex items-center justify-center w-full';
                     
-                    const moveLeftBtn = createArrowButton('←', () => moveAttachment(task.id, index, 'left'));
+                    const moveLeftBtn = createArrowButton('←', () => moveAttachment(currentTask.id, index, 'left'));
                     if (index === 0) moveLeftBtn.disabled = true;
                     
-                    const deleteAttachmentBtn = createDeleteAttachmentButton(() => confirmDeleteAttachment(task.id, index));
+                    const deleteAttachmentBtn = createDeleteAttachmentButton(() => confirmDeleteAttachment(currentTask.id, index));
 
-                    const moveRightBtn = createArrowButton('→', () => moveAttachment(task.id, index, 'right'));
-                    if (index === task.attachments.length - 1) moveRightBtn.disabled = true;
+                    const moveRightBtn = createArrowButton('→', () => moveAttachment(currentTask.id, index, 'right'));
+                    if (index === currentTask.attachments.length - 1) moveRightBtn.disabled = true;
 
                     controls.appendChild(moveLeftBtn);
                     controls.appendChild(deleteAttachmentBtn);
@@ -320,6 +324,17 @@
             }
             return null;
         }
+        
+        function findTaskAndParent(taskId, taskArray = tasks, parent = null) {
+            for(let i=0; i<taskArray.length; i++) {
+                if(taskArray[i].id == taskId) return {task: taskArray[i], parent: parent, index: i};
+                if(taskArray[i].children.length > 0) {
+                    const found = findTaskAndParent(taskId, taskArray[i].children, taskArray[i]);
+                    if(found) return found;
+                }
+            }
+            return null;
+        }
 
         function addTask(text, parentId = null) {
             const newTask = { id: Date.now().toString() + Math.random(), text: text, children: [], attachments: [] };
@@ -363,47 +378,64 @@
                     saveTasks();
                     renderTasks();
                 };
+                 reader.onerror = error => console.error("خطا در خواندن فایل:", error);
             }
         }
         
         function toggleEditMode(taskId, isEditing) {
             const taskLi = document.querySelector(`li[data-id='${taskId}']`);
-            taskLi.querySelector('.view-mode').classList.toggle('hidden', isEditing);
-            taskLi.querySelector('.edit-mode').classList.toggle('hidden', !isEditing);
+            if (isEditing) {
+                const originalTask = findTask(taskId);
+                editingTaskCopy = JSON.parse(JSON.stringify(originalTask)); // Deep copy
+                taskLi.querySelector('.view-mode').classList.add('hidden');
+                taskLi.querySelector('.edit-mode').classList.remove('hidden');
+            } else {
+                editingTaskCopy = null;
+                taskLi.querySelector('.view-mode').classList.remove('hidden');
+                taskLi.querySelector('.edit-mode').classList.add('hidden');
+                // No need to re-render, just switch back views
+            }
         }
 
         function saveChanges(taskId) {
-            const task = findTask(taskId);
             const taskLi = document.querySelector(`li[data-id='${taskId}']`);
             const titleInput = taskLi.querySelector('.edit-mode input[type="text"]');
-            if (task && titleInput) {
-                task.text = titleInput.value.trim();
+            
+            if (editingTaskCopy && titleInput) {
+                editingTaskCopy.text = titleInput.value.trim();
+                const found = findTaskAndParent(taskId);
+                if(found) {
+                    const parentArray = found.parent ? found.parent.children : tasks;
+                    parentArray[found.index] = editingTaskCopy;
+                }
                 saveTasks();
+                editingTaskCopy = null;
+                renderTasks();
             }
-            renderTasks();
         }
 
         function moveAttachment(taskId, index, direction) {
-            const task = findTask(taskId);
-            if (!task) return;
-            const attachments = task.attachments;
+            if (!editingTaskCopy || editingTaskCopy.id != taskId) return;
+            const attachments = editingTaskCopy.attachments;
             if (direction === 'left' && index > 0) {
                 [attachments[index], attachments[index - 1]] = [attachments[index - 1], attachments[index]];
             } else if (direction === 'right' && index < attachments.length - 1) {
                 [attachments[index], attachments[index + 1]] = [attachments[index + 1], attachments[index]];
             }
-            saveTasks();
-            renderTasks();
+            // Re-render only the attachments in edit mode
+            const taskLi = document.querySelector(`li[data-id='${taskId}']`);
+            const attachmentsEditContainer = taskLi.querySelector('.attachments-edit');
+            renderAttachments(attachmentsEditContainer, editingTaskCopy, true);
         }
 
         function confirmDeleteAttachment(taskId, index) {
+            if (!editingTaskCopy || editingTaskCopy.id != taskId) return;
             showConfirmModal('آیا از حذف این ضمیمه مطمئن هستید؟', () => {
-                const task = findTask(taskId);
-                if (task) {
-                    task.attachments.splice(index, 1);
-                    saveTasks();
-                    renderTasks();
-                }
+                editingTaskCopy.attachments.splice(index, 1);
+                // Re-render only the attachments in edit mode
+                const taskLi = document.querySelector(`li[data-id='${taskId}']`);
+                const attachmentsEditContainer = taskLi.querySelector('.attachments-edit');
+                renderAttachments(attachmentsEditContainer, editingTaskCopy, true);
             });
         }
 
