@@ -27,8 +27,7 @@
         .task-item-animation { animation: fade-in 0.3s ease-out forwards; }
         .file-input-button { cursor: pointer; display: inline-block; }
         .file-input-hidden { display: none; }
-        .dragging { opacity: 0.5; }
-        .drag-over { border: 2px dashed var(--ring-color); }
+        .arrow-btn:disabled { opacity: 0.3; cursor: not-allowed; }
     </style>
 </head>
 <body>
@@ -54,6 +53,7 @@
                     اضافه کردن
                 </button>
             </div>
+             <p class="text-xs sub-header mt-3">توجه: تمام اطلاعات در مرورگر شما ذخیره می‌شود و حجم آن محدود است.</p>
         </div>
 
         <div id="taskListContainer" class="card rounded-lg shadow-md p-6">
@@ -142,38 +142,29 @@
             // View Mode Content
             const viewContent = document.createElement('div');
             viewContent.className = 'view-mode';
-
             const mainContent = document.createElement('div');
             mainContent.className = 'flex items-center justify-between flex-wrap gap-y-2';
             const taskText = document.createElement('span');
             taskText.textContent = task.text;
             taskText.className = 'font-medium text-lg';
             mainContent.appendChild(taskText);
-            
             const buttonsContainer = document.createElement('div');
             buttonsContainer.className = 'flex items-center gap-2 flex-shrink-0';
-            const editBtn = createButton('ویرایش', 'bg-indigo-500', () => toggleEditMode(task.id, true));
-            buttonsContainer.appendChild(editBtn);
-            const addSubtaskBtn = createButton('زیرمجموعه', 'bg-green-500', () => showSubtaskInput(task.id));
-            buttonsContainer.appendChild(addSubtaskBtn);
-            const attachFileBtn = createFileInput(task.id);
-            buttonsContainer.appendChild(attachFileBtn);
-            const deleteBtn = createButton('حذف', 'bg-red-500', () => confirmDeleteTask(task.id));
-            buttonsContainer.appendChild(deleteBtn);
+            buttonsContainer.appendChild(createButton('ویرایش', 'bg-indigo-500', () => toggleEditMode(task.id, true)));
+            buttonsContainer.appendChild(createButton('زیرمجموعه', 'bg-green-500', () => showSubtaskInput(task.id)));
+            buttonsContainer.appendChild(createFileInput(task.id));
+            buttonsContainer.appendChild(createButton('حذف', 'bg-red-500', () => confirmDeleteTask(task.id)));
             mainContent.appendChild(buttonsContainer);
             viewContent.appendChild(mainContent);
-            
             const attachmentsContainer = document.createElement('div');
             attachmentsContainer.className = 'mt-3 flex flex-wrap gap-2 attachments-view';
             renderAttachments(attachmentsContainer, task, false);
             viewContent.appendChild(attachmentsContainer);
-            
             li.appendChild(viewContent);
 
             // Edit Mode Content (initially hidden)
             const editContent = document.createElement('div');
             editContent.className = 'edit-mode hidden';
-            
             const editForm = document.createElement('div');
             editForm.className = 'flex flex-col gap-4';
             const titleInput = document.createElement('input');
@@ -181,89 +172,95 @@
             titleInput.value = task.text;
             titleInput.className = 'custom-input text-lg p-2 border rounded-lg';
             editForm.appendChild(titleInput);
-
             const attachmentsEditContainer = document.createElement('div');
             attachmentsEditContainer.className = 'mt-1 flex flex-wrap gap-2 attachments-edit';
-            attachmentsEditContainer.innerHTML = `<p class="text-sm sub-header w-full mb-1">ضمیمه‌ها (برای جابجایی بکشید و رها کنید)</p>`;
+            attachmentsEditContainer.innerHTML = `<p class="text-sm sub-header w-full mb-1">ضمیمه‌ها</p>`;
             renderAttachments(attachmentsEditContainer, task, true);
             editForm.appendChild(attachmentsEditContainer);
-
             const editButtons = document.createElement('div');
             editButtons.className = 'flex justify-end gap-2 mt-2';
-            const saveBtn = createButton('ذخیره', 'bg-blue-600', () => saveChanges(task.id));
-            const cancelBtn = createButton('لغو', 'bg-gray-500', () => toggleEditMode(task.id, false));
-            editButtons.appendChild(cancelBtn);
-            editButtons.appendChild(saveBtn);
+            editButtons.appendChild(createButton('لغو', 'bg-gray-500', () => toggleEditMode(task.id, false)));
+            editButtons.appendChild(createButton('ذخیره', 'bg-blue-600', () => saveChanges(task.id)));
             editForm.appendChild(editButtons);
-
             editContent.appendChild(editForm);
             li.appendChild(editContent);
-
 
             // Subtasks
             const subtaskList = document.createElement('ul');
             subtaskList.className = 'mt-4 pr-6 space-y-3';
             if (task.children && task.children.length > 0) {
-                task.children.forEach(childTask => {
-                    const childElement = createTaskElement(childTask);
-                    subtaskList.appendChild(childElement);
-                });
+                task.children.forEach(childTask => li.appendChild(createTaskElement(childTask)));
             }
             li.appendChild(subtaskList);
             return li;
         }
 
         function renderAttachments(container, task, isEditMode) {
-            container.querySelectorAll('.attachment-item').forEach(el => el.remove()); // Clear previous
+            container.querySelectorAll('.attachment-item').forEach(el => el.remove());
             task.attachments.forEach((file, index) => {
                 const fileContainer = document.createElement('div');
-                fileContainer.className = 'relative attachment-item';
-                if (isEditMode) {
-                    fileContainer.draggable = true;
-                    fileContainer.dataset.index = index;
-                }
-
+                fileContainer.className = 'relative attachment-item flex flex-col items-center gap-1';
+                
                 const renderEl = createAttachmentPreview(file);
-                renderEl.onclick = isEditMode ? null : () => openModal(file.url, file.type);
+                if (!isEditMode) {
+                    renderEl.onclick = () => openModal(file.url, file.type);
+                }
                 fileContainer.appendChild(renderEl);
 
                 if (isEditMode) {
-                    const deleteAttachmentBtn = document.createElement('button');
-                    deleteAttachmentBtn.innerHTML = '&times;';
-                    deleteAttachmentBtn.className = 'absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm';
-                    deleteAttachmentBtn.onclick = () => {
-                        task.attachments.splice(index, 1);
-                        saveTasks();
-                        renderTasks(); // Re-render to update the view
-                    };
-                    fileContainer.appendChild(deleteAttachmentBtn);
+                    const controls = document.createElement('div');
+                    controls.className = 'flex items-center justify-center w-full';
+                    
+                    const moveLeftBtn = createArrowButton('←', () => moveAttachment(task.id, index, 'left'));
+                    if (index === 0) moveLeftBtn.disabled = true;
+                    
+                    const deleteAttachmentBtn = createDeleteAttachmentButton(() => confirmDeleteAttachment(task.id, index));
+
+                    const moveRightBtn = createArrowButton('→', () => moveAttachment(task.id, index, 'right'));
+                    if (index === task.attachments.length - 1) moveRightBtn.disabled = true;
+
+                    controls.appendChild(moveLeftBtn);
+                    controls.appendChild(deleteAttachmentBtn);
+                    controls.appendChild(moveRightBtn);
+                    fileContainer.appendChild(controls);
                 }
                 container.appendChild(fileContainer);
             });
-             // Add drag-and-drop listeners if in edit mode
-            if (isEditMode) {
-                addDragDropListeners(container, task);
-            }
+        }
+
+        function createArrowButton(text, onClick) {
+            const button = document.createElement('button');
+            button.textContent = text;
+            button.className = 'arrow-btn p-1 text-lg sub-header hover:text-blue-500';
+            button.onclick = onClick;
+            return button;
+        }
+
+        function createDeleteAttachmentButton(onClick) {
+            const button = document.createElement('button');
+            button.innerHTML = '&times;';
+            button.className = 'text-red-500 hover:text-red-700 font-bold text-xl px-2';
+            button.onclick = onClick;
+            return button;
         }
 
         function createAttachmentPreview(file) {
-            if (file.type.startsWith('image/')) {
-                const img = document.createElement('img');
-                img.src = file.url;
-                img.alt = file.name;
-                img.className = 'w-20 h-20 object-cover rounded-md border-2 border-color hover:opacity-80 transition cursor-pointer';
-                return img;
-            } else if (file.type.startsWith('video/')) {
-                const videoContainer = document.createElement('div');
-                videoContainer.className = 'w-20 h-20 bg-black rounded-md flex items-center justify-center border-2 border-color hover:opacity-80 transition cursor-pointer';
-                videoContainer.innerHTML = `<svg class="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"></path></svg>`;
-                return videoContainer;
-            } else {
-                const fileElement = document.createElement('div');
-                fileElement.className = 'text-sm sub-header bg-gray-200 dark:bg-gray-600 px-2 py-1 rounded-md inline-flex items-center justify-center text-center h-20 w-20 break-all';
-                fileElement.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg><span class="truncate">${file.name}</span>`;
-                return fileElement;
+            const previewWrapper = document.createElement('div');
+            previewWrapper.className = 'w-20 h-20 rounded-md border-2 border-color overflow-hidden flex items-center justify-center';
+            if (!file.type.startsWith('video/')) {
+                 previewWrapper.classList.add('hover:opacity-80', 'transition', 'cursor-pointer');
             }
+
+            if (file.type.startsWith('image/')) {
+                previewWrapper.innerHTML = `<img src="${file.url}" alt="${file.name}" class="w-full h-full object-cover">`;
+            } else if (file.type.startsWith('video/')) {
+                previewWrapper.classList.add('bg-black', 'cursor-pointer', 'hover:opacity-80');
+                previewWrapper.innerHTML = `<svg class="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"></path></svg>`;
+            } else {
+                previewWrapper.classList.add('bg-gray-200', 'dark:bg-gray-600', 'flex-col', 'p-1', 'text-center');
+                previewWrapper.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mb-1 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg><span class="text-xs sub-header truncate w-full">${file.name}</span>`;
+            }
+            return previewWrapper;
         }
         
         function createButton(text, bgColor, onClick) {
@@ -315,7 +312,7 @@
 
         function findTask(taskId, taskArray = tasks) {
             for (const task of taskArray) {
-                if (task.id === taskId) return task;
+                if (task.id == taskId) return task;
                 if (task.children.length > 0) {
                     const found = findTask(taskId, task.children);
                     if (found) return found;
@@ -337,14 +334,12 @@
         }
 
         function confirmDeleteTask(taskId) {
-            showConfirmModal('آیا از حذف این وظیفه و تمام زیرمجموعه‌های آن مطمئن هستید؟', () => {
-                deleteTask(taskId);
-            });
+            showConfirmModal('آیا از حذف این وظیفه و تمام زیرمجموعه‌های آن مطمئن هستید؟', () => deleteTask(taskId));
         }
 
         function deleteTask(taskId, taskArray = tasks) {
              for (let i = 0; i < taskArray.length; i++) {
-                if (taskArray[i].id === taskId) {
+                if (taskArray[i].id == taskId) {
                     taskArray.splice(i, 1);
                     saveTasks();
                     renderTasks();
@@ -361,9 +356,6 @@
             if (!file) return;
             const task = findTask(taskId);
             if (task) {
-                if (file.size > 5 * 1024 * 1024) { // 5MB limit
-                    alert('فایل حجیم است! به دلیل محدودیت‌های مرورگر، ممکن است ذخیره نشود.');
-                }
                 const reader = new FileReader();
                 reader.readAsDataURL(file);
                 reader.onload = () => {
@@ -374,82 +366,47 @@
             }
         }
         
-        // --- توابع ویرایش ---
         function toggleEditMode(taskId, isEditing) {
             const taskLi = document.querySelector(`li[data-id='${taskId}']`);
-            const viewMode = taskLi.querySelector('.view-mode');
-            const editMode = taskLi.querySelector('.edit-mode');
-            viewMode.classList.toggle('hidden', isEditing);
-            editMode.classList.toggle('hidden', !isEditing);
+            taskLi.querySelector('.view-mode').classList.toggle('hidden', isEditing);
+            taskLi.querySelector('.edit-mode').classList.toggle('hidden', !isEditing);
         }
 
         function saveChanges(taskId) {
             const task = findTask(taskId);
             const taskLi = document.querySelector(`li[data-id='${taskId}']`);
             const titleInput = taskLi.querySelector('.edit-mode input[type="text"]');
-            
             if (task && titleInput) {
                 task.text = titleInput.value.trim();
-                // Attachment order is already saved by drag-drop, so just save all tasks
                 saveTasks();
             }
-            renderTasks(); // Re-render to show updated view
+            renderTasks();
         }
 
-        // --- توابع Drag & Drop ---
-        let draggedItem = null;
-        function addDragDropListeners(container, task) {
-            container.addEventListener('dragstart', e => {
-                draggedItem = e.target.closest('.attachment-item');
-                setTimeout(() => {
-                    draggedItem.classList.add('dragging');
-                }, 0);
-            });
+        function moveAttachment(taskId, index, direction) {
+            const task = findTask(taskId);
+            if (!task) return;
+            const attachments = task.attachments;
+            if (direction === 'left' && index > 0) {
+                [attachments[index], attachments[index - 1]] = [attachments[index - 1], attachments[index]];
+            } else if (direction === 'right' && index < attachments.length - 1) {
+                [attachments[index], attachments[index + 1]] = [attachments[index + 1], attachments[index]];
+            }
+            saveTasks();
+            renderTasks();
+        }
 
-            container.addEventListener('dragend', e => {
-                setTimeout(() => {
-                    draggedItem.classList.remove('dragging');
-                    draggedItem = null;
-                }, 0);
-            });
-
-            container.addEventListener('dragover', e => {
-                e.preventDefault();
-                const afterElement = getDragAfterElement(container, e.clientY);
-                const currentDragged = document.querySelector('.dragging');
-                if (afterElement == null) {
-                    container.appendChild(currentDragged);
-                } else {
-                    container.insertBefore(currentDragged, afterElement);
+        function confirmDeleteAttachment(taskId, index) {
+            showConfirmModal('آیا از حذف این ضمیمه مطمئن هستید؟', () => {
+                const task = findTask(taskId);
+                if (task) {
+                    task.attachments.splice(index, 1);
+                    saveTasks();
+                    renderTasks();
                 }
             });
-            
-            container.addEventListener('drop', e => {
-                e.preventDefault();
-                const newOrder = Array.from(container.querySelectorAll('.attachment-item')).map(item => {
-                    return task.attachments[parseInt(item.dataset.index)];
-                });
-                task.attachments = newOrder;
-                saveTasks();
-                renderTasks();
-            });
         }
 
-        function getDragAfterElement(container, y) {
-            const draggableElements = [...container.querySelectorAll('.attachment-item:not(.dragging)')];
-            return draggableElements.reduce((closest, child) => {
-                const box = child.getBoundingClientRect();
-                const offset = y - box.top - box.height / 2;
-                if (offset < 0 && offset > closest.offset) {
-                    return { offset: offset, element: child };
-                } else {
-                    return closest;
-                }
-            }, { offset: Number.NEGATIVE_INFINITY }).element;
-        }
-
-
-        // --- منطق مودال‌ها ---
         const previewModal = document.getElementById('preview-modal');
         const previewModalBody = document.getElementById('modal-body');
         const closeModalBtn = document.getElementById('close-modal');
@@ -490,8 +447,6 @@
         previewModal.addEventListener('click', (e) => { if (e.target === previewModal) closeModal(); });
         confirmCancelBtn.addEventListener('click', hideConfirmModal);
         
-        
-        // --- Event Listeners اصلی ---
         addTaskBtn.addEventListener('click', () => {
             const text = newTaskInput.value.trim();
             if (text) {
@@ -504,7 +459,6 @@
             if (e.key === 'Enter') addTaskBtn.click();
         });
         
-        // رندر اولیه
         renderTasks();
     </script>
 
